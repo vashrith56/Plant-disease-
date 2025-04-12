@@ -238,6 +238,55 @@ TEXT_CONTENT.update({
     "disease_detection": "Disease Detection Visualization"
 })
 
+TEXT_CONTENT.update({
+    "treatment_plans": "PERSONALIZED TREATMENT PLANS",
+    "generate_plan": "Generate Personalized Treatment Plan",
+    "generating_plan": "Generating personalized treatment plan...",
+    "farm_details": "Farm Details",
+    "farm_size": "Farm/Field Size (hectares)",
+    "equipment_access": "Available Equipment",
+    "labor_availability": "Labor Availability",
+    "budget_constraints": "Budget Constraints",
+    "farming_type": "Farming Type",
+    "treatment_schedule": "Treatment Schedule",
+    "day_by_day": "Day-by-Day Plan",
+    "materials_needed": "Materials Needed",
+    "equipment_needed": "Equipment Needed",
+    "download_plan": "Download Treatment Plan",
+    "organic_options": "Include Organic Options",
+    "conventional_options": "Include Conventional Options",
+    "estimated_cost": "Estimated Cost",
+    "application_method": "Application Method",
+    "medium_scale": "Medium-Scale",
+    "large_scale": "Large-Scale",
+    "small_scale": "Small-Scale",
+    "spray_equipment": "Spray Equipment",
+    "manual_equipment": "Manual Tools",
+    "automated_equipment": "Automated Systems",
+    "irrigation_equipment": "Irrigation System",
+    "organic_farming": "Organic Farming",
+    "conventional_farming": "Conventional Farming",
+    "mixed_farming": "Mixed Farming",
+    "integrated_pest_management": "Integrated Pest Management",
+    "limited": "Limited",
+    "moderate": "Moderate",
+    "extensive": "Extensive",
+    "equipment_note": "Select equipment options available to you"
+})
+
+TEXT_CONTENT.update({
+    "multi_disease_detection": "Multiple Disease Detection",
+    "detected_diseases": "Detected Diseases",
+    "analyzing_disease": "Currently Analyzing",
+    "switch_disease": "Analyze Different Disease",
+    "generate_multi_report": "Generate Comprehensive Multi-Disease Report",
+    "generating_multi_report": "Generating comprehensive report for all detected diseases...",
+    "multi_disease_warning": "Multiple diseases detected. This treatment plan addresses only the currently selected disease.",
+    "comprehensive_report": "Comprehensive Multi-Disease Report",
+    "disease_interaction": "Disease Interaction Analysis",
+    "integrated_treatment": "Integrated Treatment Approach"
+})
+
 # Predefined rural locations in India with their coordinates
 RURAL_LOCATIONS = {
     "Select Location": (0.0, 0.0),
@@ -330,14 +379,53 @@ def get_weather_data(latitude, longitude):
         st.error(f"Error fetching weather data: {e}")
         return None
 
-def model_prediction(test_image):
-    """Predict plant disease from image"""
+def model_prediction(test_image, threshold=0.15):
+    """Predict multiple plant diseases from image"""
     model = tf.keras.models.load_model("trained_plant_disease_model.keras")
     image = tf.keras.preprocessing.image.load_img(test_image, target_size=(128,128))
     input_arr = tf.keras.preprocessing.image.img_to_array(image)
     input_arr = np.array([input_arr])
-    predictions = model.predict(input_arr)
-    return np.argmax(predictions)
+    predictions = model.predict(input_arr)[0]
+    
+    # Get class names list
+    class_name = ['Apple___Apple_scab', 'Apple___Black_rot', 'Apple___Cedar_apple_rust', 'Apple___healthy',
+                'Blueberry___healthy', 'Cherry_(including_sour)___Powdery_mildew', 
+                'Cherry_(including_sour)___healthy', 'Corn_(maize)___Cercospora_leaf_spot Gray_leaf_spot', 
+                'Corn_(maize)___Common_rust_', 'Corn_(maize)___Northern_Leaf_Blight', 'Corn_(maize)___healthy', 
+                'Grape___Black_rot', 'Grape___Esca_(Black_Measles)', 'Grape___Leaf_blight_(Isariopsis_Leaf_Spot)', 
+                'Grape___healthy', 'Orange___Haunglongbing_(Citrus_greening)', 'Peach___Bacterial_spot',
+                'Peach___healthy', 'Pepper,_bell___Bacterial_spot', 'Pepper,_bell___healthy', 
+                'Potato___Early_blight', 'Potato___Late_blight', 'Potato___healthy', 
+                'Raspberry___healthy', 'Soybean___healthy', 'Squash___Powdery_mildew', 
+                'Strawberry___Leaf_scorch', 'Strawberry___healthy', 'Tomato___Bacterial_spot', 
+                'Tomato___Early_blight', 'Tomato___Late_blight', 'Tomato___Leaf_Mold', 
+                'Tomato___Septoria_leaf_spot', 'Tomato___Spider_mites Two-spotted_spider_mite', 
+                'Tomato___Target_Spot', 'Tomato___Tomato_Yellow_Leaf_Curl_Virus', 'Tomato___Tomato_mosaic_virus',
+                'Tomato___healthy']
+    
+    # Get multiple predictions above threshold
+    multiple_diseases = []
+    for i, prob in enumerate(predictions):
+        if prob >= threshold:
+            multiple_diseases.append({
+                'disease': class_name[i],
+                'probability': float(prob),
+                'is_healthy': class_name[i].endswith("___healthy")
+            })
+    
+    # Sort by probability (highest first)
+    multiple_diseases = sorted(multiple_diseases, key=lambda x: x['probability'], reverse=True)
+    
+    # Ensure we have at least one prediction even if below threshold
+    if not multiple_diseases:
+        top_prediction = np.argmax(predictions)
+        multiple_diseases.append({
+            'disease': class_name[top_prediction],
+            'probability': float(predictions[top_prediction]),
+            'is_healthy': class_name[top_prediction].endswith("___healthy")
+        })
+    
+    return multiple_diseases
 
 def get_gemini_analysis(plant_disease, weather_data=None, soil_data=None, target_lang='en'):
     """Get AI analysis with translation including soil data"""
@@ -1046,6 +1134,22 @@ def analyze_disease_severity(image_file, disease_name):
         "disease_highlight": disease_highlight
     }
 
+# Add this function to help create a fallback disease analysis if needed
+def create_fallback_disease_analysis(disease_name):
+    """Create a basic disease analysis when full analysis isn't available"""
+    # Basic default values
+    return {
+        "disease_percentage": 15.0,
+        "severity": "severity_moderate",
+        "severity_score": 2,
+        "spread_rate": "spread_moderate",
+        "spread_score": 2,
+        "estimated_loss": 20.0,
+        "recovery_potential": "Moderate",
+        "recovery_percentage": 50,
+        "disease_highlight": None  # This isn't used in treatment planning
+    }
+
 def predict_yield_impact(disease_name, disease_analysis, weather_data=None, soil_data=None):
     """
     Predicts crop yield impact based on disease and environmental factors
@@ -1291,9 +1395,562 @@ def display_yield_impact(disease_name, original_image, disease_analysis, yield_p
     # Confidence level
     st.write(f"**{translate_text(TEXT_CONTENT['analysis_confidence'], language)}:** {yield_prediction['confidence']}%")
     if yield_prediction["confidence_factors"]:
-        st.write(f"**{translate_text(TEXT_CONTENT['confidence_factors'], language)}:** {', '.join(yield_prediction['confidence_factors'])}")
+        st.write(f"**{translate_text(TEXT_CONTENT['confidence_factors'], language)}:** {', '.join(yield_prediction["confidence_factors"])}")
+
+def generate_treatment_plan(disease_name, disease_analysis, farm_data, weather_data=None, soil_data=None):
+    """
+    Generate personalized treatment plan based on disease, farm details and environmental factors
+    
+    Args:
+        disease_name: Name of the detected disease
+        disease_analysis: Disease severity analysis results
+        farm_data: Farm characteristics
+        weather_data: Weather data (optional)
+        soil_data: Soil data (optional)
+        
+    Returns:
+        dict: Personalized treatment plan
+    """
+    # Extract crop type from disease name
+    crop_type = disease_name.split("___")[0].split(",")[0]
+    disease_type = disease_name.split("___")[1] if "___" in disease_name else disease_name
+    severity = disease_analysis["severity_score"]
+    spread_rate = disease_analysis["spread_score"]
+    
+    # Initialize treatment plan
+    plan = {
+        "crop_type": crop_type,
+        "disease_type": disease_type,
+        "severity": severity,
+        "farm_size": farm_data["size"],
+        "farming_type": farm_data["farming_type"],
+        "schedule": [],
+        "materials": [],
+        "equipment": [],
+        "estimated_total_cost": 0,
+        "estimated_cost_per_ha": 0,
+        "organic_options": [],
+        "conventional_options": []
+    }
+    
+    # Create base materials and treatments based on disease and severity
+    treatments = []
+    
+    # Organic treatments
+    if farm_data['include_organic']:
+        if "rust" in disease_type.lower():
+            treatments.append({
+                "name": "Neem Oil Spray",
+                "type": "organic",
+                "schedule": [0, 7, 14],  # Days from start
+                "cost_per_ha": 45,
+                "effectiveness": 0.7,
+                "equipment": ["spray_equipment", "manual_equipment"],
+                "application_rate": "5L per hectare",
+                "preparation": "Mix 30ml neem oil with 10ml liquid soap in 10L water"
+            })
+            treatments.append({
+                "name": "Sulfur Spray",
+                "type": "organic",
+                "schedule": [0, 10],
+                "cost_per_ha": 65,
+                "effectiveness": 0.75,
+                "equipment": ["spray_equipment"],
+                "application_rate": "2.5kg per hectare",
+                "preparation": "Mix 2.5kg wettable sulfur in 500L water"
+            })
+        elif "blight" in disease_type.lower():
+            treatments.append({
+                "name": "Copper Fungicide (Organic)",
+                "type": "organic",
+                "schedule": [0, 7, 14, 21],
+                "cost_per_ha": 85,
+                "effectiveness": 0.8,
+                "equipment": ["spray_equipment"],
+                "application_rate": "4kg per hectare",
+                "preparation": "Mix copper hydroxide at 4g/L water"
+            })
+            treatments.append({
+                "name": "Bacillus subtilis Spray",
+                "type": "organic",
+                "schedule": [0, 7, 14],
+                "cost_per_ha": 110,
+                "effectiveness": 0.75,
+                "equipment": ["spray_equipment"],
+                "application_rate": "3kg per hectare",
+                "preparation": "Mix 3kg product in 500L water"
+            })
+        elif "mildew" in disease_type.lower():
+            treatments.append({
+                "name": "Potassium Bicarbonate",
+                "type": "organic",
+                "schedule": [0, 5, 10, 15],
+                "cost_per_ha": 55,
+                "effectiveness": 0.7,
+                "equipment": ["spray_equipment"],
+                "application_rate": "4kg per hectare",
+                "preparation": "Mix 8g/L water with surfactant"
+            })
+        elif "bacterial" in disease_type.lower():
+            treatments.append({
+                "name": "Copper Octanoate",
+                "type": "organic",
+                "schedule": [0, 7, 14],
+                "cost_per_ha": 95,
+                "effectiveness": 0.7,
+                "equipment": ["spray_equipment"],
+                "application_rate": "3.5L per hectare",
+                "preparation": "Mix 7ml/L water"
+            })
+        else:
+            # Generic organic treatments
+            treatments.append({
+                "name": "Organic Fungicide Mix",
+                "type": "organic",
+                "schedule": [0, 10],
+                "cost_per_ha": 75,
+                "effectiveness": 0.6,
+                "equipment": ["spray_equipment", "manual_equipment"],
+                "application_rate": "According to label",
+                "preparation": "Mix according to label instructions"
+            })
+    
+    # Conventional treatments
+    if farm_data['include_conventional']:
+        if "rust" in disease_type.lower():
+            treatments.append({
+                "name": "Tebuconazole Fungicide",
+                "type": "conventional",
+                "schedule": [0, 14],
+                "cost_per_ha": 95,
+                "effectiveness": 0.9,
+                "equipment": ["spray_equipment"],
+                "application_rate": "1L per hectare",
+                "preparation": "Mix 1L product in 200L water"
+            })
+        elif "blight" in disease_type.lower():
+            treatments.append({
+                "name": "Chlorothalonil Fungicide",
+                "type": "conventional",
+                "schedule": [0, 10, 20],
+                "cost_per_ha": 110,
+                "effectiveness": 0.9,
+                "equipment": ["spray_equipment"],
+                "application_rate": "2.5L per hectare",
+                "preparation": "Mix 2.5L product in 500L water"
+            })
+        elif "mildew" in disease_type.lower():
+            treatments.append({
+                "name": "Myclobutanil Fungicide",
+                "type": "conventional",
+                "schedule": [0, 14],
+                "cost_per_ha": 120,
+                "effectiveness": 0.9,
+                "equipment": ["spray_equipment"],
+                "application_rate": "0.6L per hectare",
+                "preparation": "Mix 600ml product in 200L water"
+            })
+        elif "bacterial" in disease_type.lower():
+            treatments.append({
+                "name": "Copper Hydroxide + Mancozeb",
+                "type": "conventional",
+                "schedule": [0, 7, 14],
+                "cost_per_ha": 130,
+                "effectiveness": 0.85,
+                "equipment": ["spray_equipment"],
+                "application_rate": "3kg per hectare",
+                "preparation": "Mix 3kg product in 500L water"
+            })
+        else:
+            # Generic conventional treatment
+            treatments.append({
+                "name": "Broad-spectrum Fungicide",
+                "type": "conventional",
+                "schedule": [0, 14],
+                "cost_per_ha": 105,
+                "effectiveness": 0.85,
+                "equipment": ["spray_equipment"],
+                "application_rate": "According to label",
+                "preparation": "Mix according to label instructions"
+            })
+    
+    # Cultural practices (always included)
+    treatments.append({
+        "name": "Remove Infected Plant Material",
+        "type": "cultural",
+        "schedule": [0, 7, 14],
+        "cost_per_ha": 0 if farm_data["size"] < 2 else (farm_data["size"] * 20),
+        "effectiveness": 0.5,
+        "equipment": ["manual_equipment"],
+        "application_rate": "N/A",
+        "preparation": "Collect and dispose of infected leaves, fruits, and stems"
+    })
+    
+    # Filter treatments based on available equipment
+    available_treatments = []
+    for treatment in treatments:
+        if any(eq in farm_data["equipment"] for eq in treatment["equipment"]):
+            available_treatments.append(treatment)
+    
+    # Select treatments based on severity and farm characteristics
+    selected_treatments = []
+    
+    # For severe cases, select more intensive treatment combinations
+    if severity >= 3:
+        # Sort by effectiveness and select top treatments
+        sorted_treatments = sorted(available_treatments, key=lambda x: x["effectiveness"], reverse=True)
+        
+        # Get top organic and conventional options
+        organic_options = [t for t in sorted_treatments if t["type"] == "organic"][:2]
+        conventional_options = [t for t in sorted_treatments if t["type"] == "conventional"][:2]
+        cultural_options = [t for t in sorted_treatments if t["type"] == "cultural"][:2]
+        
+        selected_treatments = cultural_options
+        
+        # Add chemical controls based on farm type
+        if farm_data["farming_type"] == "organic_farming":
+            selected_treatments.extend(organic_options)
+        elif farm_data["farming_type"] == "conventional_farming":
+            selected_treatments.extend(conventional_options)
+        else:  # mixed or IPM
+            selected_treatments.extend(organic_options[:1])
+            selected_treatments.extend(conventional_options[:1])
+    else:
+        # For less severe cases, prefer cultural controls
+        cultural_options = [t for t in available_treatments if t["type"] == "cultural"]
+        selected_treatments.extend(cultural_options)
+        
+        # Add one chemical control based on farming type
+        if farm_data["farming_type"] != "conventional_farming":
+            organic_options = [t for t in available_treatments if t["type"] == "organic"]
+            if organic_options:
+                selected_treatments.append(organic_options[0])
+        else:
+            conventional_options = [t for t in available_treatments if t["type"] == "conventional"]
+            if conventional_options:
+                selected_treatments.append(conventional_options[0])
+    
+    # Create comprehensive schedule
+    today = datetime.datetime.now()
+    treatment_schedule = []
+    materials_list = []
+    equipment_list = []
+    
+    for treatment in selected_treatments:
+        for day in treatment["schedule"]:
+            date = today + datetime.timedelta(days=day)
+            treatment_schedule.append({
+                "day": day,
+                "date": date.strftime("%Y-%m-%d"),
+                "treatment": treatment["name"],
+                "instructions": treatment["preparation"],
+                "application_rate": treatment["application_rate"],
+                "type": treatment["type"]
+            })
+        
+        # Add to materials list
+        materials_list.append({
+            "name": treatment["name"],
+            "type": treatment["type"],
+            "quantity_per_ha": treatment["application_rate"],
+            "total_quantity": f"{treatment['application_rate']} × {farm_data['size']} ha",
+            "cost_per_ha": treatment["cost_per_ha"]
+        })
+        
+        # Add to equipment list
+        for eq in treatment["equipment"]:
+            if eq not in [e["id"] for e in equipment_list]:
+                equipment_list.append({
+                    "id": eq,
+                    "name": TEXT_CONTENT[eq]
+                })
+    
+    # Sort schedule by day
+    treatment_schedule = sorted(treatment_schedule, key=lambda x: x["day"])
+    
+    # Calculate total cost
+    total_cost = sum(t["cost_per_ha"] for t in selected_treatments) * farm_data["size"]
+    cost_per_ha = total_cost / farm_data["size"] if farm_data["size"] > 0 else 0
+    
+    # Organize treatments by type for alternative options
+    plan["organic_options"] = [t for t in available_treatments if t["type"] == "organic" 
+                              and t["name"] not in [st["name"] for st in selected_treatments]]
+    plan["conventional_options"] = [t for t in available_treatments if t["type"] == "conventional"
+                                   and t["name"] not in [st["name"] for st in selected_treatments]]
+    
+    # Update plan
+    plan["schedule"] = treatment_schedule
+    plan["materials"] = materials_list
+    plan["equipment"] = equipment_list
+    plan["estimated_total_cost"] = total_cost
+    plan["estimated_cost_per_ha"] = cost_per_ha
+    
+    return plan
+
+def display_treatment_plan(plan, farm_data, language='en'):
+    """Display personalized treatment plan in the UI"""
+    # Treatment plan header
+    st.subheader(translate_text(TEXT_CONTENT["treatment_plans"], language))
+    
+    # Overview stats in cards
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        st.metric(
+            label=translate_text("Treatment Duration", language),
+            value=f"{max([s['day'] for s in plan['schedule']])} days" if plan['schedule'] else "0 days"
+        )
+    
+    with col2:
+        st.metric(
+            label=translate_text(TEXT_CONTENT["estimated_cost"], language),
+            value=f"${plan['estimated_total_cost']:.2f}"
+        )
+    
+    with col3:
+        st.metric(
+            label=translate_text("Cost per Hectare", language),
+            value=f"${plan['estimated_cost_per_ha']:.2f}"
+        )
+    
+    # Day-by-day schedule
+    st.write("### " + translate_text(TEXT_CONTENT["day_by_day"], language))
+    
+    schedule_df = pd.DataFrame(plan['schedule'])
+    
+    if not schedule_df.empty:
+        # Create expandable sections for each treatment day
+        days_grouped = schedule_df.groupby('day')
+        
+        for day, group in days_grouped:
+            with st.expander(f"**Day {day}** - {group['date'].iloc[0]}"):
+                for _, row in group.iterrows():
+                    treatment_type_label = "🌿 Organic" if row['type'] == "organic" else "⚗️ Chemical" if row['type'] == "conventional" else "🧹 Cultural"
+                    st.markdown(f"**{row['treatment']}** ({treatment_type_label})")
+                    st.markdown(f"- {translate_text('Instructions', language)}: {row['instructions']}")
+                    st.markdown(f"- {translate_text('Application Rate', language)}: {row['application_rate']}")
+    else:
+        st.info(translate_text("No treatments scheduled. Please check your farm details.", language))
+    
+    # Materials and Equipment
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.write("### " + translate_text(TEXT_CONTENT["materials_needed"], language))
+        for material in plan['materials']:
+            material_type = "🌿 Organic" if material['type'] == "organic" else "⚗️ Chemical" if material['type'] == "conventional" else "🧹 Cultural"
+            st.markdown(f"**{material['name']}** ({material_type})")
+            st.markdown(f"- {translate_text('Total Quantity', language)}: {material['total_quantity']}")
+            st.markdown(f"- {translate_text('Cost per Hectare', language)}: ${material['cost_per_ha']}")
+    
+    with col2:
+        st.write("### " + translate_text(TEXT_CONTENT["equipment_needed"], language))
+        if plan['equipment']:
+            for equipment in plan['equipment']:
+                translated_name = translate_text(equipment['name'], language)
+                st.markdown(f"- **{translated_name}**")
+        else:
+            st.info(translate_text("No specialized equipment needed", language))
+    
+    # Generate downloadable treatment plan content and return it
+    plan_content = f"""
+    PERSONALIZED TREATMENT PLAN
+    --------------------------
+    
+    Crop: {plan['crop_type']}
+    Disease: {plan['disease_type']}
+    Farm Size: {farm_data['size']} hectares
+    Farming Type: {translate_text(TEXT_CONTENT[farm_data['farming_type']], language)}
+    
+    TREATMENT SCHEDULE:
+    -----------------
+    """
+    
+    for entry in plan['schedule']:
+        plan_content += f"\nDay {entry['day']} - {entry['date']}: {entry['treatment']}"
+        plan_content += f"\n    Instructions: {entry['instructions']}"
+        plan_content += f"\n    Application Rate: {entry['application_rate']}"
+    
+    plan_content += "\n\nMATERIALS NEEDED:"
+    plan_content += "\n-----------------"
+    for material in plan['materials']:
+        plan_content += f"\n- {material['name']}: {material['total_quantity']}"
+    
+    plan_content += "\n\nEQUIPMENT NEEDED:"
+    plan_content += "\n-----------------"
+    for equipment in plan['equipment']:
+        plan_content += f"\n- {equipment['name']}"
+    
+    plan_content += f"\n\nEstimated Total Cost: ${plan['estimated_total_cost']:.2f}"
+    plan_content += f"\nCost per Hectare: ${plan['estimated_cost_per_ha']:.2f}"
+    
+    # Return the plan content instead of creating a download button
+    return plan_content
+
+def collect_farm_details_form(language='en'):
+    """Collect farm details using a streamlit form"""
+    farm_data = {}
+    
+    # Farm size selection (hectares)
+    farm_data['size'] = st.number_input(
+        translate_text(TEXT_CONTENT["farm_size"], language),
+        min_value=0.1, max_value=1000.0, value=5.0, step=0.5
+    )
+    
+    # Farming type
+    farm_data['farming_type'] = st.selectbox(
+        translate_text(TEXT_CONTENT["farming_type"], language),
+        options=["organic_farming", "conventional_farming", "mixed_farming", "integrated_pest_management"],
+        format_func=lambda x: translate_text(TEXT_CONTENT[x], language)
+    )
+    
+    # Equipment access with columns
+    st.write(translate_text(TEXT_CONTENT["equipment_note"], language))
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        spray_equip = st.checkbox(
+            translate_text(TEXT_CONTENT["spray_equipment"], language),
+            value=True
+        )
+        manual_equip = st.checkbox(
+            translate_text(TEXT_CONTENT["manual_equipment"], language),
+            value=True
+        )
+    
+    with col2:
+        automated_equip = st.checkbox(
+            translate_text(TEXT_CONTENT["automated_equipment"], language),
+            value=False
+        )
+        irrigation_equip = st.checkbox(
+            translate_text(TEXT_CONTENT["irrigation_equipment"], language),
+            value=False
+        )
+    
+    equipment = {}
+    if spray_equip:
+        equipment["spray_equipment"] = True
+    if manual_equip:
+        equipment["manual_equipment"] = True
+    if automated_equip:
+        equipment["automated_equipment"] = True
+    if irrigation_equip:
+        equipment["irrigation_equipment"] = True
+    
+    farm_data['equipment'] = equipment
+    
+    # Labor availability
+    farm_data['labor'] = st.select_slider(
+        translate_text(TEXT_CONTENT["labor_availability"], language),
+        options=["limited", "moderate", "extensive"],
+        format_func=lambda x: translate_text(TEXT_CONTENT[x], language),
+        value="moderate"
+    )
+    
+    # Budget constraints
+    budget_options = ["Low (Under $500/ha)", "Medium ($500-1500/ha)", "High (Over $1500/ha)"]
+    farm_data['budget'] = st.select_slider(
+        translate_text(TEXT_CONTENT["budget_constraints"], language),
+        options=budget_options,
+        value="Medium ($500-1500/ha)"
+    )
+    
+    # Treatment preferences
+    col1, col2 = st.columns(2)
+    with col1:
+        farm_data['include_organic'] = st.checkbox(
+            translate_text(TEXT_CONTENT["organic_options"], language),
+            value=True
+        )
+    
+    with col2:
+        disabled = farm_data['farming_type'] == "organic_farming"
+        farm_data['include_conventional'] = st.checkbox(
+            translate_text(TEXT_CONTENT["conventional_options"], language),
+            value=(not disabled),
+            disabled=disabled
+        )
+    
+    return farm_data
+
+def display_multiple_diseases(diseases, language='en'):
+    """Display multiple detected diseases with their probabilities"""
+    st.subheader(translate_text("Multiple Disease Detection Results", language))
+    
+    # Create tabs for each detected disease
+    disease_names = [f"{d['disease']} ({d['probability']:.1%})" for d in diseases]
+    
+    # Display overview of detected diseases
+    st.write("### " + translate_text("Detected Diseases", language))
+    
+    # Create cards for each disease with color coding
+    cols = st.columns(min(3, len(diseases)))
+    
+    for i, (disease, col) in enumerate(zip(diseases, cols)):
+        is_selected = st.session_state.selected_disease_index == i
+        border_color = "2px solid #FF4B4B" if is_selected else "1px solid #cccccc"
+        
+        # Format the disease name
+        disease_name = disease['disease'].replace("___", " - ")
+        short_name = disease_name.split(" - ")[1] if " - " in disease_name else disease_name
+        crop = disease_name.split(" - ")[0] if " - " in disease_name else ""
+        
+        # Color code based on health status
+        if disease['is_healthy']:
+            bg_color = "#D1FFD1"  # Light green for healthy
+            emoji = "✅"
+        else:
+            bg_color = "#FFE0E0"  # Light red for diseases
+            emoji = "⚠️"
+        
+        # Create clickable card
+        with col:
+            card_html = f"""
+            <div style="padding: 10px; border-radius: 5px; border: {border_color}; 
+                        background-color: {bg_color}; margin-bottom: 10px; cursor: pointer;"
+                 onclick="
+                    document.querySelector('#disease-selector').value = '{i}';
+                    document.querySelector('#disease-selector').dispatchEvent(new Event('change'));
+                 ">
+                <p style="margin: 0; font-size: 20px; text-align: center;">{emoji}</p>
+                <p style="margin: 0; font-weight: bold; text-align: center;">{short_name}</p>
+                <p style="margin: 0; font-size: 12px; text-align: center;">{crop}</p>
+                <p style="margin: 0; text-align: center;">{disease['probability']:.1%}</p>
+            </div>
+            """
+            st.markdown(card_html, unsafe_allow_html=True)
+    
+    # Hidden selector that will be updated by JavaScript when cards are clicked
+    selected_index = st.selectbox(
+        "Select disease to analyze",
+        options=range(len(diseases)),
+        format_func=lambda i: disease_names[i],
+        key="disease-selector",
+        label_visibility="collapsed"
+    )
+    
+    # Update the selected disease index in session state
+    st.session_state.selected_disease_index = selected_index
+    
+    # Return the currently selected disease
+    return diseases[selected_index]
 
 def main():
+    # Initialize session state variables
+    if 'prediction' not in st.session_state:
+        st.session_state.prediction = None
+    if 'disease_analysis' not in st.session_state:
+        st.session_state.disease_analysis = None
+    if 'treatment_button_clicked' not in st.session_state:
+        st.session_state.treatment_button_clicked = False
+    if 'predictions' not in st.session_state:
+        st.session_state.predictions = []
+    if 'selected_disease_index' not in st.session_state:
+        st.session_state.selected_disease_index = 0
+    if 'multi_disease_mode' not in st.session_state:
+        st.session_state.multi_disease_mode = False
+    
     try:
         # Get selected language from session state or set default
         if 'language' not in st.session_state:
@@ -1381,7 +2038,7 @@ def main():
                 with col2:
                     longitude = st.number_input(
                         translate_text(TEXT_CONTENT["longitude"], st.session_state.language),
-                        min_value=-180.0, max_value=180.0, value=0.0
+                        min_value=-180.0, value=0.0
                     )
 
             # Collect soil data
@@ -1411,68 +2068,213 @@ def main():
                 if predict_button:
                     st.snow()
                     st.write(f"### {translate_text(TEXT_CONTENT["disease_results"], st.session_state.language)}")
-                    result_index = model_prediction(test_image)
                     
-                    # Your existing class names list
-                    class_name = ['Apple___Apple_scab', 'Apple___Black_rot', 'Apple___Cedar_apple_rust', 'Apple___healthy',
-                                'Blueberry___healthy', 'Cherry_(including_sour)___Powdery_mildew', 
-                                'Cherry_(including_sour)___healthy', 'Corn_(maize)___Cercospora_leaf_spot Gray_leaf_spot', 
-                                'Corn_(maize)___Common_rust_', 'Corn_(maize)___Northern_Leaf_Blight', 'Corn_(maize)___healthy', 
-                                'Grape___Black_rot', 'Grape___Esca_(Black_Measles)', 'Grape___Leaf_blight_(Isariopsis_Leaf_Spot)', 
-                                'Grape___healthy', 'Orange___Haunglongbing_(Citrus_greening)', 'Peach___Bacterial_spot',
-                                'Peach___healthy', 'Pepper,_bell___Bacterial_spot', 'Pepper,_bell___healthy', 
-                                'Potato___Early_blight', 'Potato___Late_blight', 'Potato___healthy', 
-                                'Raspberry___healthy', 'Soybean___healthy', 'Squash___Powdery_mildew', 
-                                'Strawberry___Leaf_scorch', 'Strawberry___healthy', 'Tomato___Bacterial_spot', 
-                                'Tomato___Early_blight', 'Tomato___Late_blight', 'Tomato___Leaf_Mold', 
-                                'Tomato___Septoria_leaf_spot', 'Tomato___Spider_mites Two-spotted_spider_mite', 
-                                'Tomato___Target_Spot', 'Tomato___Tomato_Yellow_Leaf_Curl_Virus', 'Tomato___Tomato_mosaic_virus',
-                                'Tomato___healthy']
+                    # Enable multi-disease detection mode
+                    st.session_state.multi_disease_mode = True
                     
-                    st.session_state.prediction = class_name[result_index]
-                    prediction_text = translate_text(
-                        TEXT_CONTENT["model_predicting"],
-                        st.session_state.language
-                    )
-                    st.success(f"{prediction_text} {st.session_state.prediction}")
-                    
-                    # Add yield impact prediction if the detected plant is diseased (not healthy)
-                    if not st.session_state.prediction.endswith("___healthy"):
-                        # Display a separator
-                        st.markdown("---")
+                    with st.spinner("Detecting multiple diseases..."):
+                        # Get multiple disease predictions
+                        multiple_diseases = model_prediction(test_image, threshold=0.15)
                         
-                        # Reset the file pointer to the beginning of the file for reprocessing
+                        # Store predictions in session state
+                        st.session_state.predictions = multiple_diseases
+                        
+                        # Get non-healthy predictions first
+                        disease_predictions = [d for d in multiple_diseases if not d['is_healthy']]
+                        healthy_predictions = [d for d in multiple_diseases if d['is_healthy']]
+                        
+                        # Combine them with diseases first
+                        all_predictions = disease_predictions + healthy_predictions
+                        st.session_state.predictions = all_predictions
+                        
+                        # Reset selected index
+                        st.session_state.selected_disease_index = 0
+                        
+                        # Display the detected diseases
+                        if len(all_predictions) > 1:
+                            selected_disease = display_multiple_diseases(all_predictions, st.session_state.language)
+                            st.session_state.prediction = selected_disease['disease']
+                        else:
+                            # Fallback to single disease display
+                            st.session_state.prediction = all_predictions[0]['disease']
+                            prediction_text = translate_text(
+                                TEXT_CONTENT["model_predicting"],
+                                st.session_state.language
+                            )
+                            confidence = all_predictions[0]['probability'] * 100
+                            st.success(f"{prediction_text} {st.session_state.prediction} ({confidence:.1f}%)")
+                    
+                # Add this after the disease selection UI and before the yield impact prediction
+                if st.session_state.multi_disease_mode and len(st.session_state.predictions) > 1:
+                    st.markdown("---")
+                    st.write("### " + translate_text("Currently Analyzing", st.session_state.language))
+                    
+                    # Show which disease is being analyzed
+                    selected_disease = st.session_state.predictions[st.session_state.selected_disease_index]
+                    st.info(f"**{selected_disease['disease']}** ({selected_disease['probability']:.1%})")
+                    
+                    # Allow user to switch to analyzing a different detected disease
+                    if st.button("Analyze Different Disease"):
+                        new_index = (st.session_state.selected_disease_index + 1) % len(st.session_state.predictions)
+                        st.session_state.selected_disease_index = new_index
+                        st.session_state.prediction = st.session_state.predictions[new_index]['disease']
+                        st.session_state.disease_analysis = None  # Reset analysis for new disease
+                        st.experimental_rerun()
+
+                # When generating treatment plans for multiple diseases, add a note
+                if st.session_state.multi_disease_mode and len([d for d in st.session_state.predictions if not d['is_healthy']]) > 1:
+                    st.warning(translate_text(
+                        "Multiple diseases detected. This treatment plan addresses only the currently selected disease. " +
+                        "Review all detected diseases for comprehensive treatment.",
+                        st.session_state.language
+                    ))
+
+                # Add yield impact prediction if the detected plant is diseased (not healthy)
+                if st.session_state.prediction and not st.session_state.prediction.endswith("___healthy"):
+                    # Display a separator
+                    st.markdown("---")
+                    
+                    # Reset the file pointer to the beginning of the file for reprocessing
+                    test_image.seek(0)
+                    
+                    # Analyze disease severity
+                    with st.spinner(translate_text(TEXT_CONTENT["analyzing_severity"], st.session_state.language)):
+                        # Reset the file pointer
                         test_image.seek(0)
                         
-                        # Analyze disease severity
-                        with st.spinner(translate_text(TEXT_CONTENT["analyzing_severity"], st.session_state.language)):
-                            # Save the original image for display
-                            test_image.seek(0)
+                        # Analyze disease severity and save in session state
+                        disease_analysis = analyze_disease_severity(test_image, st.session_state.prediction)
+                        st.session_state.disease_analysis = disease_analysis  # Make sure this line is present
+                        
+                        # Reset the file pointer for future use
+                        test_image.seek(0)
+                        
+                        # Get weather data for the location (already available)
+                        weather_data = get_weather_data(latitude, longitude)
+                        
+                        # Predict yield impact
+                        yield_prediction = predict_yield_impact(
+                            st.session_state.prediction, 
+                            disease_analysis, 
+                            weather_data, 
+                            soil_data
+                        )
+                        
+                        # Display yield impact prediction
+                        display_yield_impact(
+                            st.session_state.prediction,
+                            test_image,
+                            disease_analysis,
+                            yield_prediction,
+                            st.session_state.language
+                        )
+                        
+                # Add Treatment Plan Button after yield impact prediction
+                if st.session_state.prediction and not st.session_state.prediction.endswith("___healthy"):
+                    # Add separator
+                    st.markdown("---")
+                    
+                    # Use a callback function to handle button state
+                    def show_treatment_form():
+                        st.session_state.treatment_button_clicked = True
+                    
+                    # Add a dedicated button for treatment plan (only show if form not already displayed)
+                    if not st.session_state.treatment_button_clicked:
+                        st.button(
+                            "📋 " + translate_text(TEXT_CONTENT["generate_plan"], st.session_state.language),
+                            on_click=show_treatment_form,
+                            use_container_width=True
+                        )
+                    
+                    # When button is clicked, show treatment plan form
+                    if st.session_state.treatment_button_clicked:
+                        st.subheader(translate_text(TEXT_CONTENT["treatment_plans"], st.session_state.language))
+                        
+                        # Farm details collection form
+                        with st.form(key="farm_details_form"):
+                            st.write("### " + translate_text(TEXT_CONTENT["farm_details"], st.session_state.language))
                             
-                            # Analyze disease severity
-                            disease_analysis = analyze_disease_severity(test_image, st.session_state.prediction)
+                            # Collect farm details
+                            farm_data = collect_farm_details_form(st.session_state.language)
                             
-                            # Reset the file pointer again for future use
-                            test_image.seek(0)
-                            
-                            # Get weather data for the location (already available)
-                            weather_data = get_weather_data(latitude, longitude)
-                            
-                            # Predict yield impact
-                            yield_prediction = predict_yield_impact(
-                                st.session_state.prediction, 
-                                disease_analysis, 
-                                weather_data, 
-                                soil_data
+                            # Submit button
+                            generate_plan_button = st.form_submit_button(
+                                "Generate Treatment Plan",
+                                use_container_width=True
                             )
                             
-                            # Display yield impact prediction
-                            display_yield_impact(
-                                st.session_state.prediction,
-                                test_image,
-                                disease_analysis,
-                                yield_prediction,
-                                st.session_state.language
+                            if generate_plan_button:
+                                # Ensure we have disease analysis data in session state
+                                if st.session_state.disease_analysis is not None:
+                                    with st.spinner(translate_text(TEXT_CONTENT["generating_plan"], st.session_state.language)):
+                                        # Get weather data for the location
+                                        weather_data = get_weather_data(latitude, longitude)
+                                        
+                                        # Generate treatment plan using session state data - complete function call
+                                        treatment_plan = generate_treatment_plan(
+                                            st.session_state.prediction,  # Add missing argument
+                                            st.session_state.disease_analysis,  # Add missing argument
+                                            farm_data,  # Add missing argument
+                                            weather_data,  # Add missing argument
+                                            soil_data  # Add missing argument
+                                        )
+                                        
+                                        # Display treatment plan and get the plan content
+                                        plan_content = display_treatment_plan(
+                                            treatment_plan,
+                                            farm_data,
+                                            st.session_state.language
+                                        )
+                                        
+                                        # Store the plan content in session state for use outside the form
+                                        st.session_state.treatment_plan_content = plan_content
+                                else:
+                                    # If disease analysis is missing, use fallback values
+                                    st.warning("Using estimated disease severity for treatment planning.")
+                                    fallback_analysis = create_fallback_disease_analysis(st.session_state.prediction)
+                                    
+                                    # Generate treatment plan using fallback analysis
+                                    with st.spinner(translate_text(TEXT_CONTENT["generating_plan"], st.session_state.language)):
+                                        weather_data = get_weather_data(latitude, longitude)
+                                        treatment_plan = generate_treatment_plan(
+                                            st.session_state.prediction,
+                                            fallback_analysis,
+                                            farm_data,
+                                            weather_data,
+                                            soil_data
+                                        )
+                                        
+                                        # Display treatment plan and get the plan content
+                                        plan_content = display_treatment_plan(
+                                            treatment_plan,
+                                            farm_data,
+                                            st.session_state.language
+                                        )
+                                        
+                                        # Store the plan content in session state for use outside the form
+                                        st.session_state.treatment_plan_content = plan_content
+
+                        # After the form closes, check if we have a plan content to download
+                        if st.session_state.get('treatment_plan_content'):
+                            # Create the download button outside the form
+                            current_time = datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
+                            download_label = translate_text(TEXT_CONTENT["download_plan"], st.session_state.language)
+                            
+                            st.download_button(
+                                label=download_label,
+                                data=st.session_state.treatment_plan_content,
+                                file_name=f"treatment_plan_{st.session_state.prediction.split('___')[0]}_{current_time}.txt",
+                                mime="text/plain"
+                            )
+                            
+                            # Add button to create a new treatment plan
+                            def reset_treatment_form():
+                                st.session_state.treatment_button_clicked = False
+                            
+                            st.button(
+                                "Create Another Treatment Plan",
+                                on_click=reset_treatment_form,
+                                use_container_width=True
                             )
 
                 if st.button(
@@ -1573,12 +2375,12 @@ def main():
                 with col1:
                     latitude = st.number_input(
                         translate_text(TEXT_CONTENT["latitude"], st.session_state.language),
-                        min_value=-90.0, max_value=90.0, value=20.0
+                        min_value=-90.0, max_value=90.0, value=0.0
                     )
                 with col2:
                     longitude = st.number_input(
                         translate_text(TEXT_CONTENT["longitude"], st.session_state.language),
-                        min_value=-180.0, max_value=180.0, value=78.0
+                        min_value=-180.0, max_value=180.0, value=0.0
                     )
             
             # Display map for reference
@@ -1935,3 +2737,81 @@ def main():
                 
 if __name__ == "__main__":
     main()
+
+# Add after displaying individual disease analysis and treatment
+if st.session_state.multi_disease_mode and len([d for d in st.session_state.predictions if not d['is_healthy']]) > 1:
+    st.markdown("---")
+    if st.button("Generate Comprehensive Multi-Disease Report", use_container_width=True):
+        with st.spinner("Generating comprehensive report for all detected diseases..."):
+            # Create a comprehensive report
+            report = f"# Comprehensive Plant Health Report\n\n"
+            report += f"Date: {datetime.datetime.now().strftime('%Y-%m-%d')}\n\n"
+            
+            # List all detected diseases
+            report += "## Detected Conditions\n\n"
+            for i, disease in enumerate(st.session_state.predictions):
+                disease_name = disease['disease'].replace("___", " - ")
+                report += f"{i+1}. **{disease_name}** - Confidence: {disease['probability']:.1%}\n"
+            
+            report += "\n## Disease Interaction Analysis\n\n"
+            
+            # Get disease names for non-healthy predictions
+            disease_names = [d['disease'] for d in st.session_state.predictions if not d['is_healthy']]
+            
+            if len(disease_names) > 1:
+                # Generate analysis of disease interactions using AI
+                interaction_prompt = f"""
+                As a plant pathology expert, analyze the interaction between these diseases detected on the same plant:
+                {', '.join(disease_names)}
+                
+                Provide insights on:
+                1. How these diseases might interact or compound each other's effects
+                2. Treatment priority and potential conflicts in treatment approaches
+                3. Recommended integrated management approach for handling multiple diseases
+                
+                Format your response in markdown with clear sections and bullet points.
+                """
+                
+                model = genai.GenerativeModel('gemini-1.5-flash')
+                interaction_response = model.generate_content(interaction_prompt)
+                report += interaction_response.text + "\n\n"
+            
+            # Generate integrated treatment plan
+            report += "\n## Integrated Treatment Approach\n\n"
+            
+            # Add treatment recommendations for each disease
+            for disease in [d for d in st.session_state.predictions if not d['is_healthy']]:
+                disease_name = disease['disease'].replace("___", " - ")
+                report += f"### For {disease_name}:\n"
+                
+                # Generate simple treatment guidelines
+                if "rust" in disease['disease'].lower():
+                    report += "- Apply fungicides with active ingredients like tebuconazole or propiconazole\n"
+                    report += "- Remove and destroy infected plant material\n"
+                    report += "- Improve air circulation around plants\n"
+                elif "blight" in disease['disease'].lower():
+                    report += "- Apply copper-based fungicides at first sign of disease\n"
+                    report += "- Avoid overhead watering and water early in the day\n"
+                    report += "- Practice crop rotation with non-susceptible plants\n"
+                elif "bacterial" in disease['disease'].lower():
+                    report += "- Apply copper-based bactericides\n"
+                    report += "- Remove infected plants and practice strict sanitation\n"
+                    report += "- Avoid working with wet plants\n"
+                else:
+                    report += "- Remove and destroy infected plant parts\n"
+                    report += "- Apply appropriate fungicides based on local extension recommendations\n"
+                    report += "- Improve plant spacing and air circulation\n"
+                
+                report += "\n"
+            
+            # Display the report
+            st.markdown(report)
+            
+            # Provide download option
+            current_time = datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
+            st.download_button(
+                label="Download Comprehensive Report",
+                data=report,
+                file_name=f"multi_disease_report_{current_time}.md",
+                mime="text/markdown"
+            )
